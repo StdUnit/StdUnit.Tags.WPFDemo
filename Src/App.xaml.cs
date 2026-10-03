@@ -19,7 +19,7 @@ namespace WPFDemo;
 public partial class App : Application
 {
     public IServiceProvider? Root { get; private set; }
-    internal ITagsProjectCtrl? Ctrl { get; private set; }
+    internal ITagsProjectCtrl Ctrl { get; private set; } = null!;
 
     private void Application_Startup(object sender, StartupEventArgs e)
     {
@@ -37,8 +37,7 @@ public partial class App : Application
             var loggerFactory = this.Root.GetRequiredService<ILoggerFactory>();
             var logger = loggerFactory.CreateLogger<App>();
 
-            var dir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
-            dir = Path.Combine(dir!, "Tags");
+            var dir = Path.Combine(AppContext.BaseDirectory, "Tags");
             await this.Ctrl.StartPollAsync(dir, null, (proj,sp, ct) =>
             {
                 proj.Logicets.Add(new HeartBeatLogicet(
