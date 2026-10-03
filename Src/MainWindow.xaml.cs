@@ -11,26 +11,40 @@ namespace WPFDemo;
 /// </summary>
 public partial class MainWindow : Window, IDisposable
 {
-    private CompositeDisposable _disposables;
+    private IDisposable _disposables;
     private ITagsProjectCtrl? _ctrl;
 
     public MainWindow()
     {
         InitializeComponent();
-        this._disposables = new CompositeDisposable();
+
 
         var app = App.Current as App ?? throw new InvalidCastException("App.Current is not of type App");
         this._ctrl = app.Ctrl;
-        var tags= app.Ctrl!.Project!.Tags;
-        SubscribeTags(tags);
+        var projobs = app.Ctrl.ObserveStartedOrStopped()
+            .Select(evt => evt.IsStarted ? evt.Project : null)
+            // 测点项目由后台线程在 Application_Startup 中启动，可能早于本窗口构造；
+            // StartedOrStopped 是普通事件、不会重放历史记录，因此用当前 Project 作首值兜底。
+            .Prepend(app.Ctrl.Project)
+            .DistinctUntilChanged()
+            .Publish()
+            .RefCount();
+
+        this._disposables = projobs.Select(proj => Observable.Create<Unit>(observer => {
+            return proj is null ?
+                Disposable.Empty :
+                SubscribeTags(proj!.Tags);
+            }))
+            .Switch()
+            .Subscribe();
     }
 
-    private void SubscribeTags(ITagGrp tags)
+    private IDisposable SubscribeTags(ITagGrp tags)
     {
         var req = tags.SelectTag("IoBox/通用状态/PLC/心跳请求");
         var ack = tags.SelectTag("IoBox/通用状态/MST/心跳响应");
 
-
+        var d = new CompositeDisposable();
         req.Watch()
             .ObserveOnCurrentDispatcher()
             .Subscribe(evt =>
@@ -39,7 +53,7 @@ public partial class MainWindow : Window, IDisposable
                 this.txtReq.Text = newvalue?.ToString();
                 this.txtReq.Foreground= newvalue is true ? Brushes.Green : Brushes.Black;
             })
-            .AddTo(_disposables);
+            .AddTo(d);
 
         ack.Watch()
             .ObserveOnCurrentDispatcher()
@@ -49,7 +63,8 @@ public partial class MainWindow : Window, IDisposable
                 this.txtAck.Text = newvalue?.ToString();
                 this.txtAck.Foreground = newvalue is true ? Brushes.Green : Brushes.Black;
             })
-            .AddTo(_disposables);
+            .AddTo(d);
+        return d;
     }
 
     public void Dispose()

@@ -9,13 +9,13 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Itminus.Tags" Version="0.14.1" />
-    <PackageReference Include="Itminus.Tags.BlazorLib.Core" Version="0.14.1" />
-	<PackageReference Include="Itminus.Tags.S7" Version="0.14.1" />
-    <PackageReference Include="Itminus.Tags.ComScanner" Version="0.14.1" />
-    <PackageReference Include="Itminus.Tags.Core" Version="0.14.1" />
-    <PackageReference Include="Itminus.Tags.McpServer" Version="0.14.1" />
-    <PackageReference Include="Itminus.Tags.R3Extensions" Version="0.14.1" />
+    <PackageReference Include="Itminus.Tags" Version="0.15.1" />
+    <PackageReference Include="Itminus.Tags.BlazorLib.Core" Version="0.15.1" />
+	<PackageReference Include="Itminus.Tags.S7" Version="0.15.1" />
+    <PackageReference Include="Itminus.Tags.ComScanner" Version="0.15.1" />
+    <PackageReference Include="Itminus.Tags.Core" Version="0.15.1" />
+    <PackageReference Include="Itminus.Tags.McpServer" Version="0.15.1" />
+    <PackageReference Include="Itminus.Tags.R3Extensions" Version="0.15.1" />
 	  
     <PackageReference Include="R3Extensions.WPF" Version="1.3.1" />
     <PackageReference Include="ModelContextProtocol.AspNetCore" Version="1.4.1" />
