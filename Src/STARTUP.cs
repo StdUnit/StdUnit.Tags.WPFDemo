@@ -1,4 +1,4 @@
-﻿using Itminus.Tags.McpServer;
+﻿using StdUnit.Tags.McpServer;
 using WPFDemo.Tags;
 using Serilog;
 using Microsoft.Extensions.DependencyInjection;

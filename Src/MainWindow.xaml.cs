@@ -1,5 +1,5 @@
-﻿using Itminus.Tags;
-using Itminus.Tags.R3;
+﻿using StdUnit.Tags;
+using StdUnit.Tags.R3;
 using R3;
 using System.Windows;
 using System.Windows.Media;
@@ -46,7 +46,7 @@ public partial class MainWindow : Window, IDisposable
 
         var d = new CompositeDisposable();
         req.Watch()
-            .ObserveOnCurrentDispatcher()
+            .ObserveOnDispatcher(this.Dispatcher)
             .Subscribe(evt =>
             {
                 var newvalue = evt.NewValue;
@@ -56,7 +56,7 @@ public partial class MainWindow : Window, IDisposable
             .AddTo(d);
 
         ack.Watch()
-            .ObserveOnCurrentDispatcher()
+            .ObserveOnDispatcher(this.Dispatcher)
             .Subscribe(evt =>
             {
                 var newvalue = evt.NewValue;
