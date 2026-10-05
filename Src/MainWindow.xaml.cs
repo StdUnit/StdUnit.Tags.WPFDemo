@@ -1,6 +1,6 @@
 ﻿using System.Reactive;
-using Itminus.Tags;
-using Itminus.Tags.Rx;
+using StdUnit.Tags;
+using StdUnit.Tags.Rx;
 using System.Reactive.Concurrency;
 using System.Reactive.Disposables;
 using System.Reactive.Disposables.Fluent;
@@ -29,11 +29,13 @@ public partial class MainWindow : Window, IDisposable
             .Publish()
             .RefCount();
 
-        this._disposable = projobs.Select(proj => Observable.Create<Unit>(observer => {
-                return proj is null ?
-                    Disposable.Empty :
-                    SubscribeTags(proj!.Tags);
-            }))
+        this._disposable = projobs.Select(proj => 
+                Observable.Create<Unit>(observer => {
+                    return proj is null ?
+                        Disposable.Empty :
+                        SubscribeTags(proj!.Tags);
+                })
+            )
             .Switch()
             .Subscribe();
     }

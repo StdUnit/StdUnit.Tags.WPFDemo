@@ -1,5 +1,5 @@
-﻿using Itminus.Tags;
-using Itminus.Tags.S7;
+﻿using StdUnit.Tags;
+using StdUnit.Tags.S7;
 using Microsoft.Extensions.DependencyInjection;
 using System;
 using System.Collections.Generic;
