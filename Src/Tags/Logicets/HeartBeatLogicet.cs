@@ -15,9 +15,9 @@ public class HeartBeatLogicet : LogicetBase
     private readonly ITag heartAck;
     private readonly ILogger<HeartBeatLogicet> _logger;
 
-    public HeartBeatLogicet(IReadOnlyList<ITagChannel> channels, ITagGrp tags, ILogger<HeartBeatLogicet> logger) : base(channels, tags)
+    public HeartBeatLogicet(ITagsProject proj, ILogger<HeartBeatLogicet> logger) : base(proj)
     {
-        var grp = tags.SelectGrp("IoBox/通用状态");
+        var grp = this.Tags.SelectGrp("IoBox/通用状态");
 
         heartReq = grp.SelectTag("PLC/心跳请求");
         heartAck = grp.SelectTag("MST/心跳响应");
