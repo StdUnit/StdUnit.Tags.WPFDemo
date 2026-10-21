@@ -41,8 +41,7 @@ public partial class App : Application
             await this.Ctrl.StartPollAsync(dir, null, (proj,sp, ct) =>
             {
                 proj.Logicets.Add(new HeartBeatLogicet(
-                    proj.Channels,
-                    proj.Tags,
+                    proj,
                     loggerFactory.CreateLogger<HeartBeatLogicet>()
                 ));
 
