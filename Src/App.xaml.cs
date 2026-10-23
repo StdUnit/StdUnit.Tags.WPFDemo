@@ -2,6 +2,8 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using R3;
+using StdUnit.Tags.R3;
 using System.IO;
 using System.Reflection;
 using System.Windows;
@@ -17,6 +19,16 @@ public partial class App : Application
     public IServiceProvider? Root { get; private set; }
     internal ITagsProjectCtrl Ctrl { get; private set; } = null!;
 
+    /// <summary>
+    /// 观测 ITagsProject
+    /// </summary>
+    internal Observable<ITagsProject?> ObservableProject { get; private set; } = null!;
+
+    /// <summary>
+    /// Project 流的连接句柄（Connect 到 hot 事件源），随进程生命周期释放
+    /// </summary>
+    private IDisposable? _projectConnection;
+
     private void Application_Startup(object sender, StartupEventArgs e)
     {
         var builder = WebApplication.CreateBuilder();
@@ -29,6 +41,18 @@ public partial class App : Application
             MessageBox.Show($"Tags处理启动异常:{ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
             return Task.FromResult(true);
         };
+
+        // 上游 ObserveStartedOrStopped() 是 hot 事件，启动事件可能早于窗口订阅就发完：
+        // 1) 在 Ctrl.StartPollAsync 之前先 .Connect()，确保不会漏掉启动事件；
+        // 2) Replay(1) 缓存最近一个项目，后订阅者（MainWindow）也能立即拿到；
+        // 3) Prepend 用 Func 重载：每次订阅时读取当前项目，兜住“连接时项目已启动/重启”的情况。
+        var projectStream = this.Ctrl.ObserveStartedOrStopped()
+            .Select(evt => evt.IsStarted ? evt.Project : null)
+            .Prepend(() => this.Ctrl.Project)
+            .DistinctUntilChanged()
+            .Replay(1);
+        _projectConnection = projectStream.Connect();
+        this.ObservableProject = projectStream;
 
         StartTagsPoll(this.Root, this.Ctrl);
         StartWeb(app);
@@ -85,6 +109,7 @@ public partial class App : Application
         {
             await this.Ctrl.StopAsync();
         }
+        _projectConnection?.Dispose();
         Environment.Exit(0);
     }
 }

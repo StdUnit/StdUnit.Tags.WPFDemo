@@ -1,6 +1,7 @@
 ﻿using StdUnit.Tags;
 using StdUnit.Tags.R3;
 using R3;
+using Microsoft.Extensions.Logging;
 using System.Windows;
 using System.Windows.Media;
 
@@ -21,22 +22,39 @@ public partial class MainWindow : Window, IDisposable
 
         var app = App.Current as App ?? throw new InvalidCastException("App.Current is not of type App");
         this._ctrl = app.Ctrl;
-        var projobs = app.Ctrl.ObserveStartedOrStopped()
-            .Select(evt => evt.IsStarted ? evt.Project : null)
-            // 测点项目由后台线程在 Application_Startup 中启动，可能早于本窗口构造；
-            // StartedOrStopped 是普通事件、不会重放历史记录，因此用当前 Project 作首值兜底。
-            .Prepend(app.Ctrl.Project)
-            .DistinctUntilChanged()
-            .Publish()
-            .RefCount();
 
-        this._disposables = projobs.Select(proj => Observable.Create<Unit>(observer => {
-            return proj is null ?
-                Disposable.Empty :
-                SubscribeTags(proj!.Tags);
+        this._disposables = app.ObservableProject
+            .Select(proj => Observable.Create<Unit>(observer => {
+                return proj is null ?
+                    Disposable.Empty :
+                    SubscribeTagsSafe(proj);
             }))
             .Switch()
             .Subscribe();
+    }
+
+    /// <summary>
+    /// 订阅失败时留痕，避免界面一直空白却没有任何线索
+    /// </summary>
+    private IDisposable SubscribeTagsSafe(ITagsProject project)
+    {
+        try
+        {
+            return SubscribeTags(project.Tags);
+        }
+        catch (Exception ex)
+        {
+            var logger = (App.Current as App)?.Root?
+                .GetService(typeof(ILoggerFactory)) as ILoggerFactory;
+            logger?.CreateLogger<MainWindow>().LogError(ex, "订阅测点失败");
+
+            if (!this.Dispatcher.HasShutdownStarted)
+            {
+                this.Dispatcher.Invoke(() => MessageBox.Show(
+                    $"订阅测点失败：{ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error));
+            }
+            return Disposable.Empty;
+        }
     }
 
     private IDisposable SubscribeTags(ITagGrp tags)
