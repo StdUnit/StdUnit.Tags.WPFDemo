@@ -9,11 +9,11 @@
 	</PropertyGroup>
 
 	<PropertyGroup>
-		<StdUnitTagsVersion>2.0.0-beta3</StdUnitTagsVersion>
+		<StdUnitTagsVersion>2.0.0-beta5</StdUnitTagsVersion>
 	</PropertyGroup>
 	<ItemGroup>
 		<PackageReference Include="StdUnit.Tags" Version="$(StdUnitTagsVersion)" />
-		<PackageReference Include="StdUnit.Tags.BlazorLib.Core" Version="$(StdUnitTagsVersion)" />
+		<PackageReference Include="StdUnit.Tags.WebUi" Version="$(StdUnitTagsVersion)" />
 		<PackageReference Include="StdUnit.Tags.S7" Version="$(StdUnitTagsVersion)" />
 		<PackageReference Include="StdUnit.Tags.ComScanner" Version="$(StdUnitTagsVersion)" />
 		<PackageReference Include="StdUnit.Tags.Core" Version="$(StdUnitTagsVersion)" />
