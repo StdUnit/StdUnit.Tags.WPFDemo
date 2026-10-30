@@ -70,11 +70,11 @@ public partial class App : Application
                     loggerFactory.CreateLogger<HeartBeatLogicet>()
                 ));
 
-                proj.RunnerStarted += (grp, ch) => {
+                proj.RunnerStarted += (grp, ch, ct) => {
                     logger.LogInformation("Tags处理开始,grp={grpName}", grp.TagName());
                     return Task.CompletedTask;
                 };
-                proj.RunnerCrashed += (grp, ch, ex) => {
+                proj.RunnerCrashed += (grp, ch, ex, ct) => {
                     logger.LogError(ex, "Tags处理异常,grp={grpName}", grp.TagName());
                     return Task.CompletedTask;
                 };

@@ -28,7 +28,7 @@ public class HeartBeatLogicet : LogicetBase
 
     public override bool MatchEntry(ITagGrp entry) => entry.TagName()== "IoBox";
 
-    public override Task ProcessAsync(ITagGrp entry, ITagChannel? thisChannel)
+    public override Task ProcessAsync(ITagGrp entry, ITagChannel? thisChannel, CancellationToken ct)
     {
         var now = Stopwatch.GetTimestamp();
         heartAck.Value = heartReq.Value;

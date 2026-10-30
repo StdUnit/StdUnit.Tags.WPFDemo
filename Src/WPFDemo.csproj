@@ -9,7 +9,7 @@
 	</PropertyGroup>
 	
 	<PropertyGroup>
-		<StdUnitTagsVersion>2.0.0-beta3</StdUnitTagsVersion>
+		<StdUnitTagsVersion>2.0.0-beta5</StdUnitTagsVersion>
 	</PropertyGroup>
 	
 	<ItemGroup>
