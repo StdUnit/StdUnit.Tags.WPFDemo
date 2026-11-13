@@ -9,7 +9,7 @@
 	</PropertyGroup>
 	
 	<PropertyGroup>
-		<StdUnitTagsVersion>2.0.0-beta5</StdUnitTagsVersion>
+		<StdUnitTagsVersion>2.0.0-dev.261113.1152</StdUnitTagsVersion>
 	</PropertyGroup>
 	
 	<ItemGroup>
@@ -17,7 +17,6 @@
 		<PackageReference Include="StdUnit.Tags.S7" Version="$(StdUnitTagsVersion)" />
 		<PackageReference Include="StdUnit.Tags.ComScanner" Version="$(StdUnitTagsVersion)" />
 		<PackageReference Include="StdUnit.Tags.Core" Version="$(StdUnitTagsVersion)" />
-		<PackageReference Include="StdUnit.Tags.RxExtensions" Version="$(StdUnitTagsVersion)" />
 
 		<PackageReference Include="Serilog" Version="4.4.0" />
 		<PackageReference Include="Serilog.AspNetCore" Version="10.0.0" />

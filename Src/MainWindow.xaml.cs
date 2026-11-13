@@ -1,11 +1,5 @@
-﻿using System.Reactive;
 using StdUnit.Tags;
-using StdUnit.Tags.Rx;
 using Microsoft.Extensions.Logging;
-using System.Reactive.Concurrency;
-using System.Reactive.Disposables;
-using System.Reactive.Disposables.Fluent;
-using System.Reactive.Linq;
 using System.Windows;
 
 namespace WPFDemo;
@@ -15,45 +9,41 @@ namespace WPFDemo;
 /// </summary>
 public partial class MainWindow : Window, IDisposable
 {
-    private readonly IDisposable _disposable;
+    private readonly IDisposable _attachment;
+
     public MainWindow()
     {
         InitializeComponent();
+        this.Closed += (_, _) => this.Dispose();
 
         var app = App.Current as App ?? throw new InvalidCastException("App.Current is not of type App");
-        this._disposable = app.ObservableProject
-            .Select(proj => 
-                Observable.Create<Unit>(observer => {
-                    return proj is null ?
-                        Disposable.Empty :
-                        SubscribeTagsSafe(proj);
-                })
-            )
-            .Switch()
-            .Subscribe();
+
+        // 不用再手写 ObserveStartedOrStopped + Select + Prepend + Switch：
+        // AttachRunningProject 负责晚挂补偿、按 RunId 去重、停止/换运行时自动摘掉上一次挂载。
+        this._attachment = app.Ctrl.AttachRunningProject(SubscribeTagsSafe);
     }
 
     /// <summary>
     /// 订阅失败时留痕，避免界面一直空白却没有任何线索
     /// </summary>
-    private IDisposable SubscribeTagsSafe(ITagsProject project)
+    private IDisposable SubscribeTagsSafe(ITagsProject project, long runId)
     {
         try
         {
-            return SubscribeTags(project.Tags);
+            return SubscribeTags(project);
         }
         catch (Exception ex)
         {
             var logger = (App.Current as App)?.Root?
                 .GetService(typeof(ILoggerFactory)) as ILoggerFactory;
-            logger?.CreateLogger<MainWindow>().LogError(ex, "订阅测点失败");
+            logger?.CreateLogger<MainWindow>().LogError(ex, "订阅测点失败（RunId={RunId}）", runId);
 
             if (!this.Dispatcher.HasShutdownStarted)
             {
-                this.Dispatcher.Invoke(() => MessageBox.Show(
+                this.Dispatcher.InvokeAsync(() => MessageBox.Show(
                     $"订阅测点失败：{ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error));
             }
-            return Disposable.Empty;
+            return NoopDisposable.Instance;
         }
     }
 
@@ -61,7 +51,7 @@ public partial class MainWindow : Window, IDisposable
     {
         try
         {
-            this._disposable.Dispose();
+            this._attachment.Dispose();
         }
         catch 
         {
@@ -69,35 +59,36 @@ public partial class MainWindow : Window, IDisposable
         }
     }
 
-    private IDisposable SubscribeTags(ITagGrp tags)
+    private IDisposable SubscribeTags(ITagsProject project)
     {
-        var req = tags.SelectTag("IoBox/通用状态/PLC/心跳请求");
-        var ack = tags.SelectTag("IoBox/通用状态/MST/心跳响应");
+        var req = project.Tags.SelectTag("IoBox/通用状态/PLC/心跳请求");
+        var ack = project.Tags.SelectTag("IoBox/通用状态/MST/心跳响应");
 
-        CompositeDisposable d = new CompositeDisposable();
+        // 每轮处理结束后取一次本轮最终值；轮询线程上只投递，不等待 UI。
+        return project.SubscribeTurnProcess("IoBox", (entry, channel, ct) =>
+        {
+            var reqValue = req.GetTagValue<bool>();
+            var ackValue = ack.GetTagValue<bool>();
 
-        req.Watch()
-            .ObserveOn(DispatcherScheduler.Current)
-            .Subscribe(evt =>
+            if (!this.Dispatcher.HasShutdownStarted)
             {
-                this.Dispatcher.Invoke(() =>
+                this.Dispatcher.InvokeAsync(() =>
                 {
-                    this.txtReq.Text = evt.EventArgs.NewValue?.ToString();
+                    this.txtReq.Text = reqValue.ToString();
+                    this.txtAck.Text = ackValue.ToString();
                 });
-            })
-            .DisposeWith(d);
+            }
 
-        ack.Watch()
-            .ObserveOn(DispatcherScheduler.Current)
-            .Subscribe(evt =>
-            {
-                this.Dispatcher.Invoke(() =>
-                {
-                    this.txtAck.Text = evt.EventArgs.NewValue?.ToString();
-                });
-            })
-            .DisposeWith(d);
-        return d;
+            return Task.CompletedTask;
+        });
+    }
 
+    private sealed class NoopDisposable : IDisposable
+    {
+        public static readonly NoopDisposable Instance = new();
+
+        public void Dispose()
+        {
+        }
     }
 }
