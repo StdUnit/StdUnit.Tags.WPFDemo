@@ -12,31 +12,26 @@ namespace WPFDemo;
 /// </summary>
 public partial class MainWindow : Window, IDisposable
 {
-    private IDisposable _disposables;
-    private ITagsProjectCtrl? _ctrl;
+    private readonly IDisposable _attachment;
+    private readonly ITagsProjectCtrl? _ctrl;
 
     public MainWindow()
     {
         InitializeComponent();
-
+        this.Closed += (_, _) => this.Dispose();
 
         var app = App.Current as App ?? throw new InvalidCastException("App.Current is not of type App");
         this._ctrl = app.Ctrl;
 
-        this._disposables = app.ObservableProject
-            .Select(proj => Observable.Create<Unit>(observer => {
-                return proj is null ?
-                    Disposable.Empty :
-                    SubscribeTagsSafe(proj);
-            }))
-            .Switch()
-            .Subscribe();
+        // 不用再手写 ObserveStartedOrStopped + Select + Prepend + Switch：
+        // AttachRunningProject 负责晚挂补偿、按 RunId 去重、停止/换运行时自动摘掉上一次挂载。
+        this._attachment = app.Ctrl.AttachRunningProject(SubscribeTagsSafe);
     }
 
     /// <summary>
     /// 订阅失败时留痕，避免界面一直空白却没有任何线索
     /// </summary>
-    private IDisposable SubscribeTagsSafe(ITagsProject project)
+    private IDisposable SubscribeTagsSafe(ITagsProject project, long runId)
     {
         try
         {
@@ -46,11 +41,11 @@ public partial class MainWindow : Window, IDisposable
         {
             var logger = (App.Current as App)?.Root?
                 .GetService(typeof(ILoggerFactory)) as ILoggerFactory;
-            logger?.CreateLogger<MainWindow>().LogError(ex, "订阅测点失败");
+            logger?.CreateLogger<MainWindow>().LogError(ex, "订阅测点失败（RunId={RunId}）", runId);
 
             if (!this.Dispatcher.HasShutdownStarted)
             {
-                this.Dispatcher.Invoke(() => MessageBox.Show(
+                this.Dispatcher.InvokeAsync(() => MessageBox.Show(
                     $"订阅测点失败：{ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error));
             }
             return Disposable.Empty;
@@ -87,16 +82,23 @@ public partial class MainWindow : Window, IDisposable
 
     public void Dispose()
     {
-        _disposables.Dispose();
+        try
+        {
+            this._attachment.Dispose();
+        }
+        catch
+        {
+            // swallow exceptions during dispose to avoid crashing the application
+        }
     }
 
     private async void btnToggle_Click(object sender, RoutedEventArgs e)
     {
-        var proj = this._ctrl?.Project;
-        if(proj is null)
+        if (this._ctrl is null || !this._ctrl.TryGetRunning(out var proj, out _))
         {
             return;
         }
+
         var enqueue = proj.WriteIntent(
             entry:"IoBox", 
             intent: (grp, ct) => {

@@ -2,8 +2,7 @@
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using R3;
-using StdUnit.Tags.R3;
+using System.ComponentModel;
 using System.IO;
 using System.Reflection;
 using System.Windows;
@@ -19,18 +18,19 @@ public partial class App : Application
     public IServiceProvider? Root { get; private set; }
     internal ITagsProjectCtrl Ctrl { get; private set; } = null!;
 
-    /// <summary>
-    /// 观测 ITagsProject
-    /// </summary>
-    internal Observable<ITagsProject?> ObservableProject { get; private set; } = null!;
+    /// <summary>主窗口由 App 自己创建并持有：关停的触发权归这里。</summary>
+    private MainWindow? _mainWindow;
 
-    /// <summary>
-    /// Project 流的连接句柄（Connect 到 hot 事件源），随进程生命周期释放
-    /// </summary>
-    private IDisposable? _projectConnection;
+    private WebApplication? _app;
+
+    /// <summary>关停是否已经触发（0/1，用 CAS 保证只跑一次）。</summary>
+    private int _shutdownTriggered;
 
     private void Application_Startup(object sender, StartupEventArgs e)
     {
+        // 关窗不再自动退出：要走完 ShutdownAsync（异步）再显式 Shutdown()。
+        this.ShutdownMode = ShutdownMode.OnExplicitShutdown;
+
         var builder = WebApplication.CreateBuilder();
         builder.Services.ConfigureServies();
         var app = builder.Build();
@@ -42,20 +42,16 @@ public partial class App : Application
             return Task.FromResult(true);
         };
 
-        // 上游 ObserveStartedOrStopped() 是 hot 事件，启动事件可能早于窗口订阅就发完：
-        // 1) 在 Ctrl.StartPollAsync 之前先 .Connect()，确保不会漏掉启动事件；
-        // 2) Replay(1) 缓存最近一个项目，后订阅者（MainWindow）也能立即拿到；
-        // 3) Prepend 用 Func 重载：每次订阅时读取当前项目，兜住“连接时项目已启动/重启”的情况。
-        var projectStream = this.Ctrl.ObserveStartedOrStopped()
-            .Select(evt => evt.IsStarted ? evt.Project : null)
-            .Prepend(() => this.Ctrl.Project)
-            .DistinctUntilChanged()
-            .Replay(1);
-        _projectConnection = projectStream.Connect();
-        this.ObservableProject = projectStream;
+        // 观测端（MainWindow）用 AttachRunningProject 挂到"当前正在运行的项目"上：
+        // 晚挂补偿、按 RunId 去重、停止/换运行时摘旧挂新都由它负责，这里不再维护项目流。
+        this._app = app;
 
         StartTagsPoll(this.Root, this.Ctrl);
         StartWeb(app);
+
+        this._mainWindow = new MainWindow();
+        this._mainWindow.Closing += this.OnMainWindowClosing;
+        this._mainWindow.Show();
     }
 
     private void StartTagsPoll(IServiceProvider sp, ITagsProjectCtrl ctrl)
@@ -103,14 +99,111 @@ public partial class App : Application
         th2.Start();
     }
 
-    protected override async void OnExit(ExitEventArgs e)
+    #region 关停
+
+    /// <summary>
+    /// 关窗前拦一次：此时 Dispatcher 仍活着，可以放心 <c>await</c> 收尾，不需要同步阻塞。
+    /// </summary>
+    private async void OnMainWindowClosing(object? sender, CancelEventArgs e)
     {
-        if (this.Ctrl is not null)
+        if (Volatile.Read(ref this._shutdownTriggered) == 1)
         {
-            await this.Ctrl.StopAsync();
+            return;   // 已清理完（或正在收尾），放行真正的关闭
         }
-        _projectConnection?.Dispose();
-        Environment.Exit(0);
+
+        e.Cancel = true;
+        await this.ShutdownAsync();
     }
+
+    /// <summary>
+    /// 注销 / 关机：同一条收尾路径。WPF 会先派发这个事件，此时 Dispatcher 也还活着。
+    /// </summary>
+    protected override void OnSessionEnding(SessionEndingCancelEventArgs e)
+    {
+        if (Volatile.Read(ref this._shutdownTriggered) == 1)
+        {
+            base.OnSessionEnding(e);
+            return;
+        }
+
+        e.Cancel = true;
+        _ = this.ShutdownAsync();
+        base.OnSessionEnding(e);
+    }
+
+    /// <summary>
+    /// 收尾并退出。幂等；全程异步（没有 <c>.Wait()</c> / <c>.Result</c>）。
+    /// </summary>
+    internal async Task ShutdownAsync()
+    {
+        if (Interlocked.CompareExchange(ref this._shutdownTriggered, 1, 0) == 1)
+        {
+            return;
+        }
+
+        try
+        {
+            var logger = this.Root?.GetService<ILogger<App>>();
+
+            // 先停 Web，避免关停过程中还有请求打进来；再停 Tags 本体
+            if (this._app is { } app)
+            {
+                try
+                {
+                    using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                    await app.StopAsync(cts.Token);
+                }
+                catch (Exception ex)
+                {
+                    logger?.LogError(ex, "Web 宿主 StopAsync 异常");
+                }
+            }
+
+            if (this.Ctrl is not null)
+            {
+                try
+                {
+                    // 单独限时：Tags 内部卡住时也要让后续的释放动作跑完
+                    await this.Ctrl.StopAsync().WaitAsync(TimeSpan.FromSeconds(5));
+                }
+                catch (Exception ex)
+                {
+                    logger?.LogError(ex, "Tags StopAsync 异常");
+                }
+            }
+
+            // 释放 Web 宿主会连带释放承载 Ctrl 的 DI 容器，所以只能放在关停末端
+            if (this._app is { } disposingApp)
+            {
+                try
+                {
+                    await disposingApp.DisposeAsync();
+                }
+                catch (Exception ex)
+                {
+                    logger?.LogError(ex, "Web 宿主释放异常");
+                }
+                finally
+                {
+                    this._app = null;
+                }
+            }
+        }
+        finally
+        {
+            // 收尾失败也要退出，不能把窗口/进程卡住。
+            if (!this.Dispatcher.HasShutdownStarted)
+            {
+                this.Dispatcher.Invoke(() =>
+                {
+                    this._mainWindow?.Close();   // 关窗会触发 Closed：退订测点观测
+                    this._mainWindow = null;
+                    this.Shutdown();
+                });
+            }
+        }
+    }
+
+    #endregion
 }
 

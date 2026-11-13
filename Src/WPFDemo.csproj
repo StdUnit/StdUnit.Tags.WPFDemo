@@ -9,7 +9,7 @@
 	</PropertyGroup>
 
 	<PropertyGroup>
-		<StdUnitTagsVersion>2.0.0-beta5</StdUnitTagsVersion>
+		<StdUnitTagsVersion>2.0.0-dev.261113.1152</StdUnitTagsVersion>
 	</PropertyGroup>
 	<ItemGroup>
 		<PackageReference Include="StdUnit.Tags" Version="$(StdUnitTagsVersion)" />
